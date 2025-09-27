@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单词自测工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        danger: '#EF4444',
+                        dark: '#1F2937',
+                        save: '#8B5CF6' // 存档按钮颜色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .card-shadow {
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            }
+            .transition-custom {
+                transition: all 0.3s ease;
+            }
+            .input-focus {
+                @apply focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none;
+            }
+            .active-row {
+                @apply bg-primary/5 border-primary;
+            }
+            /* 禁止文本框缩放 */
+            .no-resize {
+                resize: none;
+            }
+            /* 正确答案的背景效果 - 精确控制在圆角内 */
+            .correct-answer-style {
+                background-color: rgba(16, 185, 129, 0.1);
+                border-color: rgba(16, 185, 129, 0.3);
+                transition: all 0.3s ease;
+            }
+            /* 统一高度的容器样式 */
+            .equal-height-container {
+                height: 58px; /* 精确设置相同高度 */
+                box-sizing: border-box; /* 确保内边距和边框不增加总高度 */
+            }
+            /* 存档列表项悬停效果 */
+            .save-item-hover {
+                @apply hover:bg-gray-50 transition-custom;
+            }
+            /* 弹窗动画 */
+            .modal-animation {
+                animation: fadeIn 0.3s ease-out forwards;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            /* 通知提示动画 */
+            .toast-animation {
+                animation: toast 3s ease-out forwards;
+            }
+            @keyframes toast {
+                0% { opacity: 0; transform: translateY(-20px); }
+                10% { opacity: 1; transform: translateY(0); }
+                80% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(-20px); }
+            }
+            /* 分数标签样式 */
+            .score-badge {
+                @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+            }
+            .score-passed {
+                @apply bg-secondary/10 text-secondary;
+            }
+            .score-failed {
+                @apply bg-danger/10 text-danger;
+            }
+            /* 弹窗层级 - 确保删除确认弹窗在最顶层 */
+            .modal-base {
+                z-index: 50;
+            }
+            .modal-delete {
+                z-index: 100; /* 高于其他弹窗 */
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <!-- 标题区域 -->
+        <header class="text-center mb-10">
+            <h1 class="text-[clamp(2rem,5vw,3rem)] font-bold text-dark mb-2">
+                <i class="fa fa-book text-primary mr-2"></i>单词自测工具
+            </h1>
+            <p class="text-gray-600 text-lg">根据释义拼写单词，检验你的记忆效果</p>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main>
+            <!-- 步骤指示器 -->
+            <div class="flex justify-between items-center mb-8 px-4">
+                <div class="flex flex-col items-center" id="step1-indicator">
+                    <div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold mb-2">1</div>
+                    <span class="text-sm text-primary font-medium">设置数量</span>
+                </div>
+                <div class="flex-1 h-1 mx-2 bg-gray-200">
+                    <div class="h-full bg-primary transition-all duration-500" id="progress-1-2" style="width: 0%"></div>
+                </div>
+                <div class="flex flex-col items-center" id="step2-indicator">
+                    <div class="w-10 h-10 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold mb-2">2</div>
+                    <span class="text-sm text-gray-500">输入单词</span>
+                </div>
+                <div class="flex-1 h-1 mx-2 bg-gray-200">
+                    <div class="h-full bg-primary transition-all duration-500" id="progress-2-3" style="width: 0%"></div>
+                </div>
+                <div class="flex flex-col items-center" id="step3-indicator">
+                    <div class="w-10 h-10 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold mb-2">3</div>
+                    <span class="text-sm text-gray-500">开始测试</span>
+                </div>
+                <div class="flex-1 h-1 mx-2 bg-gray-200">
+                    <div class="h-full bg-primary transition-all duration-500" id="progress-3-4" style="width: 0%"></div>
+                </div>
+                <div class="flex flex-col items-center" id="step4-indicator">
+                    <div class="w-10 h-10 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold mb-2">4</div>
+                    <span class="text-sm text-gray-500">测试结果</span>
+                </div>
+            </div>
+
+            <!-- 步骤1: 设置单词数量 -->
+            <section id="step1" class="bg-white rounded-xl p-6 card-shadow transition-custom">
+                <h2 class="text-2xl font-bold text-dark mb-4">今天背了多少个单词？</h2>
+                <p class="text-gray-600 mb-6">请输入你今天背诵的单词数量，之后你可以逐个录入这些单词</p>
+                
+                <div class="mb-6">
+                    <label for="wordCount" class="block text-gray-700 mb-2 font-medium">单词数量</label>
+                    <input 
+                        type="number" 
+                        id="wordCount" 
+                        min="1" 
+                        value="5"
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 input-focus transition-custom"
+                    >
+                </div>
+                
+                <button 
+                    id="toStep2" 
+                    class="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-lg transition-custom flex items-center justify-center mb-3"
+                >
+                    下一步 <i class="fa fa-arrow-right ml-2"></i>
+                </button>
+                
+                <!-- 读档按钮 -->
+                <button 
+                    id="loadSaved" 
+                    class="w-full bg-save hover:bg-save/90 text-white font-bold py-3 px-6 rounded-lg transition-custom flex items-center justify-center"
+                >
+                    读档背诵 <i class="fa fa-folder-open ml-2"></i>
+                </button>
+            </section>
+
+            <!-- 步骤2: 输入单词 - 表格布局 -->
+            <section id="step2" class="bg-white rounded-xl p-6 card-shadow transition-custom hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-dark">输入单词</h2>
+                    <div class="text-sm text-gray-500">
+                        <span class="font-medium text-primary" id="completedCount">0</span> / <span id="totalWordCount">5</span> 个单词
+                    </div>
+                </div>
+                
+                <p class="text-gray-600 mb-4 text-sm">
+                    <i class="fa fa-info-circle text-primary mr-1"></i> 
+                    提示：在单词框按Tab键切换到释义框，在释义框按Enter键保存并跳到下一行
+                    <br>
+                    <i class="fa fa-info-circle text-primary mr-1"></i>
+                    提示：使用方向键↑↓←→可以在输入框之间导航
+                </p>
+                
+                <!-- 表格布局的单词输入区 -->
+                <div class="overflow-x-auto mb-6">
+                    <table class="w-full border-collapse">
+                        <thead>
+                            <tr class="border-b-2 border-gray-200">
+                                <th class="py-3 px-4 text-left text-gray-700 font-bold w-1/5">序号</th>
+                                <th class="py-3 px-4 text-left text-gray-700 font-bold w-2/5">单词</th>
+                                <th class="py-3 px-4 text-left text-gray-700 font-bold w-2/5">释义</th>
+                            </tr>
+                        </thead>
+                        <tbody id="wordTableBody">
+                            <!-- 单词行将通过JavaScript动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="flex justify-between gap-3">
+                    <!-- 返回上一步按钮 -->
+                    <button 
+                        id="backToStep1" 
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-8 rounded-lg transition-custom flex items-center"
+                    >
+                        <i class="fa fa-arrow-left mr-2"></i> 返回上一步
+                    </button>
+                    
+                    <div class="flex gap-3">
+                        <!-- 存档按钮 -->
+                        <button 
+                            id="saveCurrent" 
+                            class="bg-save hover:bg-save/90 text-white font-bold py-3 px-8 rounded-lg transition-custom flex items-center"
+                            disabled
+                        >
+                            存档 <i class="fa fa-save ml-2"></i>
+                        </button>
+                        
+                        <button 
+                            id="toStep3" 
+                            class="bg-secondary hover:bg-secondary/90 text-white font-bold py-3 px-8 rounded-lg transition-custom flex items-center"
+                            disabled
+                        >
+                            开始测试 <i class="fa fa-check ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 步骤3: 测试（给出释义，拼写单词） -->
+            <section id="step3" class="bg-white rounded-xl p-6 card-shadow transition-custom hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-dark">单词拼写测试</h2>
+                    <span id="testCounter" class="bg-accent/10 text-accent px-3 py-1 rounded-full text-sm font-medium">1/5</span>
+                </div>
+                
+                <div class="mb-8 text-center">
+                    <p class="text-gray-500 mb-2">请根据以下释义拼写单词</p>
+                    <!-- 中文意思显示框 - 与输入框高度严格一致 -->
+                    <div id="currentDefinition" class="text-xl text-dark my-4 p-4 bg-gray-50 rounded-lg border border-gray-200 equal-height-container flex items-center justify-center">
+                        一种多汁的水果，通常为红色、绿色或黄色
+                    </div>
+                    
+                    <!-- 答案输入区 -->
+                    <div class="relative" id="answerInputContainer">
+                        <input 
+                            type="text" 
+                            id="userAnswer" 
+                            placeholder="请输入单词..."
+                            class="w-full mt-4 px-4 py-3 rounded-lg border border-gray-300 input-focus transition-custom text-center text-xl equal-height-container"
+                        >
+                    </div>
+                </div>
+                
+                <!-- 错误反馈区 -->
+                <div id="answerFeedback" class="mb-6 hidden">
+                    <div class="p-4 rounded-lg bg-danger/5 border border-danger/20">
+                        <p class="text-danger font-medium mb-2">正确拼写：</p>
+                        <p id="correctAnswer" class="text-dark font-bold text-lg"></p>
+                    </div>
+                </div>
+                
+                <!-- 按钮区域 -->
+                <div class="flex justify-between">
+                    <!-- 返回上一步按钮 -->
+                    <button 
+                        id="backToStep2" 
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-8 rounded-lg transition-custom flex items-center"
+                    >
+                        <i class="fa fa-arrow-left mr-2"></i> 返回上一步
+                    </button>
+                    
+                    <!-- 下一题按钮 -->
+                    <button 
+                        id="nextQuestion" 
+                        class="bg-primary hover:bg-primary/90 text-white font-bold py-3 px-8 rounded-lg transition-custom hidden"
+                    >
+                        下一题 <i class="fa fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </section>
+
+            <!-- 步骤4: 测试结果 -->
+            <section id="step4" class="bg-white rounded-xl p-6 card-shadow transition-custom hidden">
+                <h2 class="text-2xl font-bold text-dark mb-6 text-center">测试结果</h2>
+                
+                <div class="flex justify-center mb-8">
+                    <div class="text-center">
+                        <div class="text-5xl font-bold" id="scoreDisplay">80%</div>
+                        <div class="text-gray-600">正确率</div>
+                    </div>
+                    <div class="w-px bg-gray-200 mx-8"></div>
+                    <div class="text-center">
+                        <div class="text-5xl font-bold text-dark mb-2" id="correctCountDisplay">4</div>
+                        <div class="text-gray-600">答对 / <span id="totalCountDisplay">5</span> 题</div>
+                    </div>
+                </div>
+                
+                <div id="wrongWordsSection" class="mb-6 hidden">
+                    <h3 class="text-xl font-bold text-danger mb-3">
+                        <i class="fa fa-exclamation-circle mr-2"></i>需要复习的单词
+                    </h3>
+                    <div id="wrongWordsList" class="space-y-3 max-h-40 overflow-y-auto pr-2"></div>
+                </div>
+                
+                <div class="flex gap-4">
+                    <button 
+                        id="retestWrong" 
+                        class="flex-1 bg-danger hover:bg-danger/90 text-white font-bold py-3 px-6 rounded-lg transition-custom hidden"
+                    >
+                        重测错误单词 <i class="fa fa-refresh ml-2"></i>
+                    </button>
+                    <button 
+                        id="restart" 
+                        class="flex-1 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-lg transition-custom"
+                    >
+                        重新开始 <i class="fa fa-home ml-2"></i>
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- 存档管理弹窗 -->
+        <div id="saveManagerModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center modal-base">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 modal-animation">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-dark">我的单词存档</h3>
+                    <button id="closeSaveManager" class="text-gray-500 hover:text-gray-700">
+                        <i class="fa fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <div id="noSavesMessage" class="text-center py-8 text-gray-500 hidden">
+                    <i class="fa fa-folder-open-o text-4xl mb-3"></i>
+                    <p>暂无存档，快去创建你的第一个单词集吧！</p>
+                </div>
+                
+                <div id="savesList" class="max-h-80 overflow-y-auto mb-4 space-y-2">
+                    <!-- 存档列表将通过JavaScript动态生成 -->
+                </div>
+                
+                <div class="flex justify-end">
+                    <button id="closeSaveModalBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg transition-custom">
+                        关闭
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 删除确认弹窗 - 使用更高的z-index确保置顶 -->
+        <div id="deleteConfirmModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center modal-delete">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 modal-animation">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-dark">确认删除</h3>
+                    <button id="closeDeleteConfirm" class="text-gray-500 hover:text-gray-700">
+                        <i class="fa fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <p id="deleteConfirmMessage" class="mb-6">你确定要删除这个存档吗？此操作不可恢复。</p>
+                
+                <div class="flex justify-end gap-3">
+                    <button id="cancelDeleteBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg transition-custom">
+                        取消
+                    </button>
+                    <button id="confirmDeleteBtn" class="bg-danger hover:bg-danger/90 text-white font-bold py-2 px-6 rounded-lg transition-custom">
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 存档命名弹窗 -->
+        <div id="saveNameModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center modal-base">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 modal-animation">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="saveModalTitle" class="text-xl font-bold text-dark">保存单词集</h3>
+                    <button id="closeSaveNameModal" class="text-gray-500 hover:text-gray-700">
+                        <i class="fa fa-times text-xl"></i>
+                    </button>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="saveName" class="block text-gray-700 mb-2 font-medium">请为你的单词集命名</label>
+                    <input 
+                        type="text" 
+                        id="saveName" 
+                        placeholder="例如：大学英语四级单词"
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 input-focus transition-custom"
+                    >
+                </div>
+                
+                <div class="flex justify-end gap-3">
+                    <button id="cancelSaveBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg transition-custom">
+                        取消
+                    </button>
+                    <button id="confirmSaveBtn" class="bg-save hover:bg-save/90 text-white font-bold py-2 px-6 rounded-lg transition-custom">
+                        确认保存
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通知提示框 -->
+        <div id="toastNotification" class="fixed top-4 right-4 bg-dark text-white px-4 py-3 rounded-lg shadow-lg z-50 hidden toast-animation">
+            <p id="toastMessage"></p>
+        </div>
+
+        <!-- 页脚 -->
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>单词自测工具 &copy; 2023 | 帮助你更有效地记忆单词</p>
+        </footer>
+    </div>
+
+    <script>
+        // 应用状态
+        const appState = {
+            totalWords: 5,
+            currentRowIndex: 0,
+            currentField: 'word', // 'word' 或 'definition'，跟踪当前焦点所在的字段
+            words: [],
+            shuffledWords: [],
+            currentTestIndex: 0,
+            testResults: [],
+            wrongWords: [],
+            saves: [], // 存储所有存档
+            currentSaveId: null, // 当前加载的存档ID
+            currentScore: null, // 当前测试的分数
+            isFirstTest: true, // 标记是否是第一次测试
+            saveToRenameIndex: -1, // 用于重命名功能，仅记录要重命名的存档索引
+            saveToDeleteIndex: -1 // 用于删除功能，记录要删除的存档索引
+        };
+
+        // DOM 元素
+        const elements = {
+            // 步骤容器
+            step1: document.getElementById('step1'),
+            step2: document.getElementById('step2'),
+            step3: document.getElementById('step3'),
+            step4: document.getElementById('step4'),
+            
+            // 步骤指示器
+            step1Indicator: document.getElementById('step1-indicator'),
+            step2Indicator: document.getElementById('step2-indicator'),
+            step3Indicator: document.getElementById('step3-indicator'),
+            step4Indicator: document.getElementById('step4-indicator'),
+            progress12: document.getElementById('progress-1-2'),
+            progress23: document.getElementById('progress-2-3'),
+            progress34: document.getElementById('progress-3-4'),
+            
+            // 步骤1元素
+            wordCount: document.getElementById('wordCount'),
+            toStep2: document.getElementById('toStep2'),
+            loadSaved: document.getElementById('loadSaved'),
+            
+            // 步骤2元素
+            wordTableBody: document.getElementById('wordTableBody'),
+            completedCount: document.getElementById('completedCount'),
+            totalWordCount: document.getElementById('totalWordCount'),
+            toStep3: document.getElementById('toStep3'),
+            saveCurrent: document.getElementById('saveCurrent'),
+            backToStep1: document.getElementById('backToStep1'),
+            
+            // 步骤3元素
+            testCounter: document.getElementById('testCounter'),
+            currentDefinition: document.getElementById('currentDefinition'),
+            userAnswer: document.getElementById('userAnswer'),
+            answerFeedback: document.getElementById('answerFeedback'),
+            correctAnswer: document.getElementById('correctAnswer'),
+            nextQuestion: document.getElementById('nextQuestion'),
+            answerInputContainer: document.getElementById('answerInputContainer'),
+            backToStep2: document.getElementById('backToStep2'),
+            
+            // 步骤4元素
+            scoreDisplay: document.getElementById('scoreDisplay'),
+            correctCountDisplay: document.getElementById('correctCountDisplay'),
+            totalCountDisplay: document.getElementById('totalCountDisplay'),
+            wrongWordsSection: document.getElementById('wrongWordsSection'),
+            wrongWordsList: document.getElementById('wrongWordsList'),
+            retestWrong: document.getElementById('retestWrong'),
+            restart: document.getElementById('restart'),
+            
+            // 存档相关元素
+            saveManagerModal: document.getElementById('saveManagerModal'),
+            closeSaveManager: document.getElementById('closeSaveManager'),
+            closeSaveModalBtn: document.getElementById('closeSaveModalBtn'),
+            noSavesMessage: document.getElementById('noSavesMessage'),
+            savesList: document.getElementById('savesList'),
+            saveNameModal: document.getElementById('saveNameModal'),
+            saveModalTitle: document.getElementById('saveModalTitle'),
+            closeSaveNameModal: document.getElementById('closeSaveNameModal'),
+            saveName: document.getElementById('saveName'),
+            cancelSaveBtn: document.getElementById('cancelSaveBtn'),
+            confirmSaveBtn: document.getElementById('confirmSaveBtn'),
+            
+            // 删除确认弹窗元素
+            deleteConfirmModal: document.getElementById('deleteConfirmModal'),
+            closeDeleteConfirm: document.getElementById('closeDeleteConfirm'),
+            deleteConfirmMessage: document.getElementById('deleteConfirmMessage'),
+            cancelDeleteBtn: document.getElementById('cancelDeleteBtn'),
+            confirmDeleteBtn: document.getElementById('confirmDeleteBtn'),
+            
+            // 通知提示框
+            toastNotification: document.getElementById('toastNotification'),
+            toastMessage: document.getElementById('toastMessage')
+        };
+
+        // 初始化应用
+        function initApp() {
+            // 从localStorage加载存档
+            loadSavesFromStorage();
+            setupEventListeners();
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 步骤1事件
+            elements.toStep2.addEventListener('click', goToStep2);
+            elements.loadSaved.addEventListener('click', openSaveManager);
+            
+            // 步骤2事件
+            elements.toStep3.addEventListener('click', goToStep3);
+            elements.saveCurrent.addEventListener('click', () => {
+                // 新建存档
+                appState.saveToRenameIndex = -1;
+                openSaveNameModal();
+            });
+            elements.backToStep1.addEventListener('click', backToStep1);
+            
+            // 步骤3事件
+            elements.nextQuestion.addEventListener('click', goToNextQuestion);
+            elements.backToStep2.addEventListener('click', backToStep2);
+            
+            // 为测试答案输入框添加回车键提交功能
+            elements.userAnswer.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    // 如果下一题按钮可见，则按回车进入下一题
+                    if (!elements.nextQuestion.classList.contains('hidden')) {
+                        goToNextQuestion();
+                    } else {
+                        checkAnswer(); // 否则提交答案
+                    }
+                }
+            });
+            
+            // 步骤4事件
+            elements.retestWrong.addEventListener('click', retestWrongWords);
+            elements.restart.addEventListener('click', restartApp);
+            
+            // 存档管理弹窗事件
+            elements.closeSaveManager.addEventListener('click', closeSaveManager);
+            elements.closeSaveModalBtn.addEventListener('click', closeSaveManager);
+            
+            // 存档命名弹窗事件
+            elements.closeSaveNameModal.addEventListener('click', closeSaveNameModal);
+            elements.cancelSaveBtn.addEventListener('click', closeSaveNameModal);
+            elements.confirmSaveBtn.addEventListener('click', handleSaveAction);
+            
+            // 删除确认弹窗事件
+            elements.closeDeleteConfirm.addEventListener('click', closeDeleteConfirmModal);
+            elements.cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
+            elements.confirmDeleteBtn.addEventListener('click', performDelete);
+            
+            // 存档列表事件委托
+            elements.savesList.addEventListener('click', (e) => {
+                // 检查点击的是哪个按钮
+                if (e.target.closest('.edit-save')) {
+                    const editBtn = e.target.closest('.edit-save');
+                    e.stopPropagation();
+                    const index = parseInt(editBtn.dataset.index);
+                    appState.saveToRenameIndex = index;
+                    openSaveNameModal();
+                } else if (e.target.closest('.delete-save')) {
+                    const deleteBtn = e.target.closest('.delete-save');
+                    e.stopPropagation();
+                    const index = parseInt(deleteBtn.dataset.index);
+                    // 显示删除确认弹窗
+                    openDeleteConfirmModal(index);
+                } else if (e.target.closest('.load-save')) {
+                    const loadBtn = e.target.closest('.load-save');
+                    e.stopPropagation();
+                    const index = parseInt(loadBtn.dataset.index);
+                    loadSave(index);
+                }
+            });
+
+            // 添加全局键盘事件监听器，处理方向键导航
+            document.addEventListener('keydown', handleGlobalKeydown);
+        }
+
+        // 处理全局键盘事件，特别是方向键
+        function handleGlobalKeydown(e) {
+            // 只有在步骤2（输入单词）时才处理方向键导航
+            if (!elements.step2.classList.contains('hidden')) {
+                const activeInput = document.activeElement;
+                const isWordInput = activeInput.dataset && activeInput.dataset.type === 'word';
+                const isDefinitionInput = activeInput.dataset && activeInput.dataset.type === 'definition';
+                
+                // 只在单词或释义输入框获得焦点时处理方向键
+                if (isWordInput || isDefinitionInput) {
+                    const currentIndex = parseInt(activeInput.dataset.index);
+                    
+                    // 记录当前焦点所在的字段
+                    appState.currentField = isWordInput ? 'word' : 'definition';
+                    appState.currentRowIndex = currentIndex;
+                    
+                    // 处理方向键
+                    switch (e.key) {
+                        case 'ArrowRight':
+                            // 向右箭头：从单词框切换到释义框
+                            if (isWordInput) {
+                                e.preventDefault();
+                                const definitionInput = document.querySelector(`[data-type="definition"][data-index="${currentIndex}"]`);
+                                if (definitionInput) {
+                                    definitionInput.focus();
+                                    appState.currentField = 'definition';
+                                }
+                            }
+                            break;
+                            
+                        case 'ArrowLeft':
+                            // 向左箭头：从释义框切换到单词框
+                            if (isDefinitionInput) {
+                                e.preventDefault();
+                                const wordInput = document.querySelector(`[data-type="word"][data-index="${currentIndex}"]`);
+                                if (wordInput) {
+                                    wordInput.focus();
+                                    appState.currentField = 'word';
+                                }
+                            }
+                            break;
+                            
+                        case 'ArrowDown':
+                            // 向下箭头：移动到下一行的同一字段
+                            e.preventDefault();
+                            if (currentIndex < appState.totalWords - 1) {
+                                navigateToField(currentIndex + 1, appState.currentField);
+                            }
+                            break;
+                            
+                        case 'ArrowUp':
+                            // 向上箭头：移动到上一行的同一字段
+                            e.preventDefault();
+                            if (currentIndex > 0) {
+                                navigateToField(currentIndex - 1, appState.currentField);
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+
+        // 导航到指定行的指定字段
+        function navigateToField(rowIndex, fieldType) {
+            // 设置当前行为激活行
+            setActiveRow(rowIndex);
+            
+            // 聚焦到指定字段
+            const targetInput = document.querySelector(`[data-type="${fieldType}"][data-index="${rowIndex}"]`);
+            if (targetInput) {
+                targetInput.focus();
+                appState.currentRowIndex = rowIndex;
+                appState.currentField = fieldType;
+            }
+        }
+
+        // 创建单词输入表格
+        function createWordTable(count, predefinedWords = null) {
+            elements.wordTableBody.innerHTML = '';
+            appState.words = [];
+            
+            for (let i = 0; i < count; i++) {
+                // 如果有预定义的单词，则使用它们，否则初始化空值
+                const word = predefinedWords && predefinedWords[i] ? predefinedWords[i].word : '';
+                const definition = predefinedWords && predefinedWords[i] ? predefinedWords[i].definition : '';
+                
+                appState.words.push({ word, definition });
+                
+                const row = document.createElement('tr');
+                row.className = `border-b border-gray-100 hover:bg-gray-50 transition-custom ${i === 0 ? 'active-row' : ''}`;
+                row.dataset.index = i;
+                
+                // 序号单元格
+                const indexCell = document.createElement('td');
+                indexCell.className = 'py-3 px-4 text-gray-500 font-medium';
+                indexCell.textContent = i + 1;
+                
+                // 单词输入单元格
+                const wordCell = document.createElement('td');
+                wordCell.className = 'py-3 px-4';
+                const wordInput = document.createElement('input');
+                wordInput.type = 'text';
+                wordInput.placeholder = `输入单词 ${i + 1}`;
+                wordInput.className = `w-full px-3 py-2 rounded-lg border border-gray-300 input-focus transition-custom`;
+                wordInput.dataset.type = 'word';
+                wordInput.dataset.index = i;
+                wordInput.value = word;
+                wordCell.appendChild(wordInput);
+                
+                // 释义输入单元格 - 已改为input类型
+                const defCell = document.createElement('td');
+                defCell.className = 'py-3 px-4';
+                const defInput = document.createElement('input'); // 从textarea改为input
+                defInput.type = 'text'; // 设置为文本输入
+                defInput.placeholder = `输入释义 ${i + 1}`;
+                defInput.className = `w-full px-3 py-2 rounded-lg border border-gray-300 input-focus transition-custom`; // 移除了no-resize和single-line-textarea类
+                defInput.dataset.type = 'definition';
+                defInput.dataset.index = i;
+                defInput.value = definition;
+                defCell.appendChild(defInput);
+                
+                // 添加到行
+                row.appendChild(indexCell);
+                row.appendChild(wordCell);
+                row.appendChild(defCell);
+                elements.wordTableBody.appendChild(row);
+                
+                // 添加事件监听器
+                setupInputEventListeners(wordInput, defInput, row, i);
+            }
+            
+            // 聚焦第一个输入框
+            document.querySelector('[data-type="word"][data-index="0"]').focus();
+            
+            // 更新完成状态
+            updateCompletionStatus();
+        }
+
+        // 为输入框设置事件监听器
+        function setupInputEventListeners(wordInput, defInput, row, index) {
+            // 单词输入框事件
+            wordInput.addEventListener('input', () => {
+                appState.words[index].word = wordInput.value.trim();
+                updateCompletionStatus();
+            });
+            
+            wordInput.addEventListener('keydown', (e) => {
+                // Tab键切换到当前行的释义输入框
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    defInput.focus();
+                    appState.currentField = 'definition';
+                }
+            });
+            
+            // 释义输入框事件（现在是input类型）
+            defInput.addEventListener('input', () => {
+                appState.words[index].definition = defInput.value.trim();
+                updateCompletionStatus();
+            });
+            
+            defInput.addEventListener('keydown', (e) => {
+                // Enter键保存并跳到下一行的单词输入框
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    
+                    // 保存当前值
+                    appState.words[index].definition = defInput.value.trim();
+                    
+                    // 如果不是最后一行，跳到下一行
+                    if (index < appState.totalWords - 1) {
+                        navigateToField(index + 1, 'word');
+                    } else {
+                        // 最后一行则检查是否可以进入测试
+                        updateCompletionStatus();
+                        if (isAllWordsCompleted()) {
+                            elements.toStep3.focus();
+                        }
+                    }
+                }
+                // Shift+Tab键切换回当前行的单词输入框
+                if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    wordInput.focus();
+                    appState.currentField = 'word';
+                }
+            });
+            
+            // 记录输入框获得焦点时的状态
+            wordInput.addEventListener('focus', () => {
+                setActiveRow(index);
+                appState.currentField = 'word';
+                appState.currentRowIndex = index;
+            });
+            
+            defInput.addEventListener('focus', () => {
+                setActiveRow(index);
+                appState.currentField = 'definition';
+                appState.currentRowIndex = index;
+            });
+            
+            // 点击行时激活
+            row.addEventListener('click', (e) => {
+                // 如果点击的是输入框，不处理（避免焦点丢失）
+                if (e.target.tagName === 'INPUT') return;
+                
+                setActiveRow(index);
+                
+                // 聚焦到当前字段或默认单词输入框
+                const targetField = appState.currentField || 'word';
+                const targetInput = document.querySelector(`[data-type="${targetField}"][data-index="${index}"]`);
+                if (targetInput) {
+                    targetInput.focus();
+                }
+            });
+        }
+
+        // 设置当前激活行
+        function setActiveRow(index) {
+            // 移除之前的激活状态
+            document.querySelectorAll('#wordTableBody tr').forEach(row => {
+                row.classList.remove('active-row');
+            });
+            
+            // 设置新的激活状态
+            const newRow = document.querySelector(`#wordTableBody tr[data-index="${index}"]`);
+            if (newRow) {
+                newRow.classList.add('active-row');
+                appState.currentRowIndex = index;
+                
+                // 滚动到可见区域
+                newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        // 更新完成状态
+        function updateCompletionStatus() {
+            const completed = appState.words.filter(word => 
+                word.word.trim() !== '' && word.definition.trim() !== ''
+            ).length;
+            
+            elements.completedCount.textContent = completed;
+            
+            // 启用/禁用开始测试按钮和存档按钮
+            const allCompleted = completed === appState.totalWords;
+            if (allCompleted) {
+                elements.toStep3.removeAttribute('disabled');
+                elements.toStep3.classList.remove('opacity-50', 'cursor-not-allowed');
+                elements.saveCurrent.removeAttribute('disabled');
+                elements.saveCurrent.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                elements.toStep3.setAttribute('disabled', 'true');
+                elements.toStep3.classList.add('opacity-50', 'cursor-not-allowed');
+                elements.saveCurrent.setAttribute('disabled', 'true');
+                elements.saveCurrent.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // 检查是否所有单词都已完成输入
+        function isAllWordsCompleted() {
+            return appState.words.every(word => 
+                word.word.trim() !== '' && word.definition.trim() !== ''
+            );
+        }
+
+        // 切换到步骤2
+        function goToStep2() {
+            const count = parseInt(elements.wordCount.value);
+            if (isNaN(count) || count < 1) {
+                showToast('请输入有效的单词数量');
+                return;
+            }
+            
+            appState.totalWords = count;
+            appState.currentRowIndex = 0;
+            appState.currentField = 'word';
+            appState.currentSaveId = null; // 新创建的单词集，没有关联存档
+            appState.currentScore = null; // 重置当前分数
+            appState.isFirstTest = true; // 重置为第一次测试
+            
+            // 更新UI
+            updateStepIndicator(2);
+            elements.step1.classList.add('hidden');
+            elements.step2.classList.remove('hidden');
+            elements.totalWordCount.textContent = count;
+            
+            // 创建单词表格
+            createWordTable(count);
+        }
+
+        // 从步骤2返回步骤1
+        function backToStep1() {
+            // 更新UI
+            updateStepIndicator(1);
+            elements.step2.classList.add('hidden');
+            elements.step1.classList.remove('hidden');
+        }
+
+        // 切换到步骤3
+        function goToStep3() {
+            // 确保所有单词都已保存
+            document.querySelectorAll('[data-type="word"]').forEach(input => {
+                const index = parseInt(input.dataset.index);
+                appState.words[index].word = input.value.trim();
+            });
+            
+            document.querySelectorAll('[data-type="definition"]').forEach(input => {
+                const index = parseInt(input.dataset.index);
+                appState.words[index].definition = input.value.trim();
+            });
+            
+            // 打乱单词顺序
+            appState.shuffledWords = [...appState.words].sort(() => Math.random() - 0.5);
+            appState.currentTestIndex = 0;
+            appState.testResults = [];
+            
+            // 更新UI
+            updateStepIndicator(3);
+            elements.step2.classList.add('hidden');
+            elements.step3.classList.remove('hidden');
+            updateTestUI();
+        }
+
+        // 从步骤3返回步骤2
+        function backToStep2() {
+            // 更新UI
+            updateStepIndicator(2);
+            elements.step3.classList.add('hidden');
+            elements.step2.classList.remove('hidden');
+        }
+
+        // 更新测试界面
+        function updateTestUI() {
+            if (appState.currentTestIndex >= appState.shuffledWords.length) {
+                goToStep4();
+                return;
+            }
+            
+            const currentItem = appState.shuffledWords[appState.currentTestIndex];
+            elements.testCounter.textContent = `${appState.currentTestIndex + 1}/${appState.shuffledWords.length}`;
+            elements.currentDefinition.textContent = currentItem.definition;
+            elements.userAnswer.value = '';
+            elements.answerFeedback.classList.add('hidden');
+            elements.nextQuestion.classList.add('hidden');
+            
+            // 重置输入框样式
+            elements.userAnswer.classList.remove('correct-answer-style');
+            elements.userAnswer.classList.remove('border-secondary');
+            
+            // 聚焦到答案输入框
+            elements.userAnswer.focus();
+        }
+
+        // 检查答案
+        function checkAnswer() {
+            const userAnswer = elements.userAnswer.value.trim().toLowerCase();
+            const currentItem = appState.shuffledWords[appState.currentTestIndex];
+            const correctAnswer = currentItem.word.toLowerCase();
+            
+            // 检查拼写是否正确（不区分大小写）
+            const isCorrect = userAnswer === correctAnswer;
+            
+            // 保存测试结果
+            appState.testResults.push({
+                word: currentItem.word,
+                definition: currentItem.definition,
+                userAnswer: userAnswer,
+                isCorrect: isCorrect
+            });
+            
+            if (isCorrect) {
+                // 答案正确：应用绿色背景样式
+                elements.userAnswer.classList.add('correct-answer-style');
+                elements.userAnswer.classList.add('border-secondary');
+                
+                // 禁用输入框防止继续输入
+                elements.userAnswer.disabled = true;
+                
+                // 短暂延迟后自动进入下一题
+                setTimeout(() => {
+                    elements.userAnswer.disabled = false;
+                    goToNextQuestion();
+                }, 800);
+            } else {
+                // 答案错误：显示正确拼写，等待用户操作
+                elements.correctAnswer.textContent = currentItem.word;
+                elements.answerFeedback.classList.remove('hidden');
+                elements.nextQuestion.classList.remove('hidden');
+                
+                // 选中错误的输入，方便用户重新输入或复制正确答案
+                elements.userAnswer.select();
+            }
+        }
+
+        // 前往下一个问题
+        function goToNextQuestion() {
+            appState.currentTestIndex++;
+            updateTestUI();
+        }
+
+        // 切换到步骤4
+        function goToStep4() {
+            // 计算结果
+            const correctCount = appState.testResults.filter(r => r.isCorrect).length;
+            const totalCount = appState.testResults.length;
+            const score = Math.round((correctCount / totalCount) * 100);
+            
+            // 保存当前测试分数（如果是第一次测试）
+            appState.currentScore = score;
+            
+            // 对于新创建的单词集（未存档但已测试），先确保它已被存档
+            if (appState.isFirstTest) {
+                if (appState.currentSaveId) {
+                    // 已有存档ID，更新分数
+                    updateSaveScore(appState.currentSaveId, score);
+                } else {
+                    // 没有存档ID，自动创建一个临时存档
+                    const tempName = `单词集 (${new Date().toLocaleString()})`;
+                    const newSave = {
+                        id: Date.now().toString(),
+                        name: tempName,
+                        words: [...appState.words],
+                        timestamp: new Date().toISOString(),
+                        lastScore: score,
+                        lastTestDate: new Date().toISOString()
+                    };
+                    appState.saves.push(newSave);
+                    appState.currentSaveId = newSave.id;
+                    saveSavesToStorage();
+                    showToast(`已自动保存单词集并记录首次测试成绩: ${score}%`);
+                }
+            }
+            
+            // 收集错误的单词
+            appState.wrongWords = appState.testResults
+                .filter(r => !r.isCorrect)
+                .map(r => ({
+                    word: r.word,
+                    definition: r.definition
+                }));
+            
+            // 更新UI
+            updateStepIndicator(4);
+            elements.step3.classList.add('hidden');
+            elements.step4.classList.remove('hidden');
+            
+            // 设置分数颜色（>=60%绿色，<60%红色）
+            elements.scoreDisplay.textContent = `${score}%`;
+            if (score >= 60) {
+                elements.scoreDisplay.className = 'text-5xl font-bold text-secondary';
+            } else {
+                elements.scoreDisplay.className = 'text-5xl font-bold text-danger';
+            }
+            
+            elements.correctCountDisplay.textContent = correctCount;
+            elements.totalCountDisplay.textContent = totalCount;
+            
+            // 显示错误单词
+            if (appState.wrongWords.length > 0) {
+                elements.wrongWordsSection.classList.remove('hidden');
+                elements.retestWrong.classList.remove('hidden');
+                
+                // 清空并填充错误单词列表
+                elements.wrongWordsList.innerHTML = '';
+                appState.wrongWords.forEach(word => {
+                    const wordElement = document.createElement('div');
+                    wordElement.className = 'p-3 bg-danger/5 border border-danger/20 rounded-lg';
+                    wordElement.innerHTML = `
+                        <div class="font-bold text-dark">${word.word}</div>
+                        <div class="text-sm text-gray-600">${word.definition}</div>
+                    `;
+                    elements.wrongWordsList.appendChild(wordElement);
+                });
+            } else {
+                elements.wrongWordsSection.classList.add('hidden');
+                elements.retestWrong.classList.add('hidden');
+            }
+        }
+
+        // 重测错误单词 - 标记为非第一次测试
+        function retestWrongWords() {
+            appState.shuffledWords = [...appState.wrongWords].sort(() => Math.random() - 0.5);
+            appState.currentTestIndex = 0;
+            appState.testResults = [];
+            appState.isFirstTest = false; // 重测不再是第一次测试，成绩不会更新到存档
+            
+            elements.step4.classList.add('hidden');
+            elements.step3.classList.remove('hidden');
+            updateTestUI();
+        }
+
+        // 重新开始应用
+        function restartApp() {
+            appState.totalWords = 5;
+            appState.currentRowIndex = 0;
+            appState.currentField = 'word';
+            appState.words = [];
+            appState.shuffledWords = [];
+            appState.currentTestIndex = 0;
+            appState.testResults = [];
+            appState.wrongWords = [];
+            appState.currentSaveId = null;
+            appState.currentScore = null;
+            appState.isFirstTest = true; // 重置为第一次测试
+            appState.saveToRenameIndex = -1;
+            appState.saveToDeleteIndex = -1;
+            
+            // 重置输入值
+            elements.wordCount.value = '5';
+            
+            // 更新UI
+            updateStepIndicator(1);
+            elements.step4.classList.add('hidden');
+            elements.step1.classList.remove('hidden');
+        }
+
+        // 更新步骤指示器
+        function updateStepIndicator(step) {
+            // 重置所有指示器
+            [elements.step1Indicator, elements.step2Indicator, elements.step3Indicator, elements.step4Indicator]
+                .forEach(el => {
+                    el.querySelector('div').className = 'w-10 h-10 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold mb-2';
+                    el.querySelector('span').className = 'text-sm text-gray-500';
+                });
+                
+            // 重置进度条
+            [elements.progress12, elements.progress23, elements.progress34]
+                .forEach(progress => progress.style.width = '0%');
+            
+            // 更新当前步骤及之前的步骤
+            for (let i = 1; i <= step; i++) {
+                const indicator = document.getElementById(`step${i}-indicator`);
+                indicator.querySelector('div').className = 'w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold mb-2';
+                indicator.querySelector('span').className = 'text-sm text-primary font-medium';
+                
+                // 更新进度条
+                if (i > 1) {
+                    document.getElementById(`progress-${i-1}-${i}`).style.width = '100%';
+                }
+            }
+        }
+
+        // 存档相关功能
+        function loadSavesFromStorage() {
+            try {
+                const savedData = localStorage.getItem('vocabularySaves');
+                appState.saves = savedData ? JSON.parse(savedData) : [];
+            } catch (e) {
+                console.error('加载存档失败:', e);
+                appState.saves = [];
+            }
+        }
+
+        function saveSavesToStorage() {
+            try {
+                localStorage.setItem('vocabularySaves', JSON.stringify(appState.saves));
+            } catch (e) {
+                console.error('保存存档失败:', e);
+                showToast('存档失败，请稍后再试');
+            }
+        }
+
+        // 更新存档的分数 - 只有第一次测试会更新
+        function updateSaveScore(saveId, score) {
+            const saveIndex = appState.saves.findIndex(save => save.id === saveId);
+            if (saveIndex !== -1 && appState.isFirstTest) {
+                // 只有第一次测试才更新分数
+                appState.saves[saveIndex].lastScore = score;
+                appState.saves[saveIndex].lastTestDate = new Date().toISOString();
+                saveSavesToStorage();
+                showToast(`已记录首次测试成绩: ${score}%`);
+            }
+        }
+
+        function openSaveManager() {
+            // 更新存档列表
+            renderSavesList();
+            
+            // 显示弹窗
+            elements.saveManagerModal.classList.remove('hidden');
+            elements.saveManagerModal.classList.add('flex');
+        }
+
+        function closeSaveManager() {
+            elements.saveManagerModal.classList.add('hidden');
+            elements.saveManagerModal.classList.remove('flex');
+        }
+
+        function renderSavesList() {
+            elements.savesList.innerHTML = '';
+            
+            // 如果没有存档，显示提示信息
+            if (appState.saves.length === 0) {
+                elements.noSavesMessage.classList.remove('hidden');
+                return;
+            }
+            
+            // 隐藏无存档提示
+            elements.noSavesMessage.classList.add('hidden');
+            
+            // 渲染存档列表
+            appState.saves.forEach((save, index) => {
+                const saveItem = document.createElement('div');
+                saveItem.className = 'flex justify-between items-center p-3 border border-gray-100 rounded-lg save-item-hover';
+                
+                // 根据分数设置不同的样式类（>=60%绿色，<60%红色）
+                let scoreClass = '';
+                if (save.lastScore !== undefined) {
+                    scoreClass = save.lastScore >= 60 ? 'score-passed' : 'score-failed';
+                }
+                
+                // 构建分数显示部分（仅当有分数时显示）
+                const scoreHtml = save.lastScore !== undefined 
+                    ? `<span class="score-badge ${scoreClass} ml-2">
+                         ${save.lastScore}%
+                       </span>`
+                    : '';
+                
+                saveItem.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center">
+                            <h4 class="font-medium text-dark truncate" id="saveName-${index}">${save.name}</h4>
+                            ${scoreHtml}
+                        </div>
+                        <p class="text-xs text-gray-500">
+                            ${save.words.length} 个单词 
+                            ${save.lastScore !== undefined ? `· 首次得分: <span class="${scoreClass} font-medium">${save.lastScore}%</span> · 测试于 ${formatDate(save.lastTestDate)}` : `· 保存于 ${formatDate(save.timestamp)}`}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 ml-4">
+                        <button class="edit-save text-gray-500 hover:text-primary p-1" data-index="${index}">
+                            <i class="fa fa-pencil"></i>
+                        </button>
+                        <button class="delete-save text-gray-500 hover:text-danger p-1" data-index="${index}">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                        <button class="load-save bg-primary/10 text-primary hover:bg-primary/20 p-1 rounded" data-index="${index}">
+                            <i class="fa fa-play"></i>
+                        </button>
+                    </div>
+                `;
+                elements.savesList.appendChild(saveItem);
+            });
+        }
+
+        // 打开删除确认弹窗
+        function openDeleteConfirmModal(index) {
+            if (index < 0 || index >= appState.saves.length) return;
+            
+            // 保存要删除的存档索引
+            appState.saveToDeleteIndex = index;
+            
+            // 设置确认消息，包含存档名称
+            const saveName = appState.saves[index].name;
+            elements.deleteConfirmMessage.textContent = `你确定要删除存档"${saveName}"吗？此操作不可恢复。`;
+            
+            // 显示弹窗
+            elements.deleteConfirmModal.classList.remove('hidden');
+            elements.deleteConfirmModal.classList.add('flex');
+        }
+
+        // 关闭删除确认弹窗
+        function closeDeleteConfirmModal() {
+            elements.deleteConfirmModal.classList.add('hidden');
+            elements.deleteConfirmModal.classList.remove('flex');
+            // 重置要删除的存档索引
+            appState.saveToDeleteIndex = -1;
+        }
+
+        // 执行删除操作
+        function performDelete() {
+            if (appState.saveToDeleteIndex === -1) return;
+            
+            const saveIndex = appState.saveToDeleteIndex;
+            const saveName = appState.saves[saveIndex].name;
+            
+            // 删除存档
+            appState.saves.splice(saveIndex, 1);
+            
+            // 保存到本地存储
+            saveSavesToStorage();
+            
+            // 更新存档列表
+            renderSavesList();
+            
+            // 显示提示信息
+            showToast(`已删除存档: ${saveName}`);
+            
+            // 关闭删除确认弹窗
+            closeDeleteConfirmModal();
+        }
+
+        function openSaveNameModal() {
+            // 清空输入框并聚焦
+            elements.saveName.value = '';
+            
+            // 根据是新建还是重命名，设置弹窗标题和默认名称
+            if (appState.saveToRenameIndex !== -1) {
+                // 重命名操作
+                elements.saveModalTitle.textContent = '重命名单词集';
+                const existingSave = appState.saves[appState.saveToRenameIndex];
+                elements.saveName.value = existingSave.name;
+            } else {
+                // 新建存档操作
+                elements.saveModalTitle.textContent = '保存单词集';
+            }
+            
+            elements.saveName.focus();
+            
+            // 显示弹窗
+            elements.saveNameModal.classList.remove('hidden');
+            elements.saveNameModal.classList.add('flex');
+        }
+
+        function closeSaveNameModal() {
+            elements.saveNameModal.classList.add('hidden');
+            elements.saveNameModal.classList.remove('flex');
+            // 重置重命名索引
+            appState.saveToRenameIndex = -1;
+        }
+
+        function handleSaveAction() {
+            const saveName = elements.saveName.value.trim();
+            
+            if (!saveName) {
+                showToast('请输入存档名称');
+                elements.saveName.focus();
+                return;
+            }
+            
+            if (appState.saveToRenameIndex !== -1) {
+                // 重命名操作：只修改名称，其他数据保持不变
+                const saveIndex = appState.saveToRenameIndex;
+                appState.saves[saveIndex].name = saveName;
+                showToast(`已重命名存档: ${saveName}`);
+                
+                // 重命名后刷新存档列表显示
+                renderSavesList();
+            } else {
+                // 新建存档操作
+                // 检查是否已经有一个自动创建的临时存档（来自首次测试）
+                let existingTempSaveIndex = -1;
+                if (appState.currentSaveId) {
+                    existingTempSaveIndex = appState.saves.findIndex(save => save.id === appState.currentSaveId);
+                }
+                
+                if (existingTempSaveIndex !== -1) {
+                    // 更新现有临时存档的名称
+                    appState.saves[existingTempSaveIndex].name = saveName;
+                    showToast(`已更新存档名称: ${saveName}`);
+                } else {
+                    // 创建新存档
+                    const newSave = {
+                        id: Date.now().toString(),
+                        name: saveName,
+                        words: [...appState.words],
+                        timestamp: new Date().toISOString()
+                    };
+                    appState.saves.push(newSave);
+                    appState.currentSaveId = newSave.id;
+                    showToast(`已保存新存档: ${saveName}`);
+                }
+            }
+            
+            // 保存到本地存储
+            saveSavesToStorage();
+            
+            // 关闭弹窗并重置状态
+            closeSaveNameModal();
+        }
+
+        function loadSave(index) {
+            if (index < 0 || index >= appState.saves.length) return;
+            
+            const save = appState.saves[index];
+            appState.totalWords = save.words.length;
+            appState.currentSaveId = save.id;
+            appState.currentScore = save.lastScore; // 加载存档的分数
+            appState.isFirstTest = save.lastScore === undefined; // 如果已有分数，则不是第一次测试
+            
+            // 更新UI
+            updateStepIndicator(2);
+            elements.step1.classList.add('hidden');
+            elements.step2.classList.remove('hidden');
+            elements.totalWordCount.textContent = save.words.length;
+            
+            // 创建单词表格并填充数据
+            createWordTable(save.words.length, save.words);
+            
+            // 关闭存档管理弹窗
+            closeSaveManager();
+            
+            let message = `已加载存档: ${save.name}`;
+            if (save.lastScore !== undefined) {
+                message += ` (首次得分: ${save.lastScore}%)`;
+            }
+            showToast(message);
+        }
+
+        // 显示通知提示
+        function showToast(message) {
+            elements.toastMessage.textContent = message;
+            elements.toastNotification.classList.remove('hidden');
+            
+            // 3秒后自动隐藏（由CSS动画控制）
+            setTimeout(() => {
+                elements.toastNotification.classList.add('hidden');
+            }, 3000);
+        }
+
+        // 格式化日期显示
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // 启动应用
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
